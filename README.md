@@ -148,4 +148,5 @@ docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
 
 ## License
 
-MIT, Dimitres Kisimov, 2026. Credits and references in [CREDITS.md](CREDITS.md).
+© 2026 Dimitres Kisimov — all rights reserved; published for portfolio review.
+See [LICENSE](LICENSE). Credits and references in [CREDITS.md](CREDITS.md).
