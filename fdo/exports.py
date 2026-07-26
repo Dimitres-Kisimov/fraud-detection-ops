@@ -264,6 +264,29 @@ def _queue_page(pdf: PdfPages, results: dict) -> None:
     plt.close(fig)
 
 
+def _drift_page(pdf: PdfPages, results: dict) -> None:
+    from fdo.drift import draw_drift_chart, drift_from_results
+
+    analysis = drift_from_results(results)
+    fm = analysis["fraud_mix"]
+    fig, ax = plt.subplots(figsize=(11, 8.5))
+    fig.patch.set_facecolor(SURFACE)
+    draw_drift_chart(analysis, ax)
+    note = (
+        "HONEST FINDING: every input feature and the model score sit far below the 0.10 band -\n"
+        "the generator's day-60 drift changes P(fraud | x), not the feature mix, and input/score\n"
+        "PSI is blind to that by construction. The label-aware monitor on confirmed-fraud rows\n"
+        f"is what sees it: fraud category-mix PSI {fm['category_psi']:.3f} (gift-card share "
+        f"{fm['mix'].set_index('category').loc['gift_cards', 'train_share']:.0%} -> "
+        f"{fm['mix'].set_index('category').loc['gift_cards', 'recent_share']:.0%}), "
+        f"night share {fm['night_share_train']:.0%} -> {fm['night_share_recent']:.0%}."
+    )
+    fig.text(0.07, 0.02, note, fontsize=9, color=INK_2)
+    fig.tight_layout(rect=(0, 0.10, 1, 1))
+    pdf.savefig(fig)
+    plt.close(fig)
+
+
 def build_pdf(results: dict, path: str) -> str:
     with PdfPages(path) as pdf:
         _cover_page(pdf, results)
@@ -271,6 +294,7 @@ def build_pdf(results: dict, path: str) -> str:
         _reliability_page(pdf, results)
         _threshold_page(pdf, results)
         _queue_page(pdf, results)
+        _drift_page(pdf, results)
     return path
 
 

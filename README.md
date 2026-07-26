@@ -105,13 +105,68 @@ only 0.6% of expected value to keep all 8 segments watched (plain top-K-by-proba
 leaves segments completely unreviewed and recovers 13% less, because ranking by p alone
 ignores amounts). Realized value landing near expected value is the calibration paying off.
 
+### Drift monitoring: PSI, and an honest blind spot
+
+`python -m fdo --drift` compares the training window (days 0-84) against the final test
+window (days 102-120) with the Population Stability Index, implemented from scratch in
+`fdo/drift.py`. PSI bins the training distribution into deciles and measures where the
+recent data moved: `PSI = sum (a_b - e_b) * ln(a_b / e_b)`. The conventional bands - below
+0.10 stable, 0.10-0.25 moderate, above 0.25 major - are an industry rule of thumb from
+credit-scorecard practice, not a statistical law, so the module also computes the
+finite-sample noise floor (PSI is asymptotically `(1/n_e + 1/n_a) * chi2(B-1)` under "no
+change", Yurdakul 2018).
+
+Measured (seed 7, train n=42,000 vs test n=9,000):
+
+| Monitor                                  |   PSI | Verdict |
+| ---------------------------------------- | ----: | ------- |
+| All 15 input features (worst: hour_cos)  | 0.003 | stable  |
+| Model score distribution                 | 0.002 | stable  |
+| Fraud-only merchant-category mix         | 0.137 | **moderate** (noise 95th pct: 0.135) |
+| Fraud-only night-time share (52% -> 40%) | 0.057 | stable band, but above its noise 95th pct (0.037) |
+
+The honest finding is the interesting one: **every input feature and the model score are
+flat, and that is correct**. The generator's day-60 drift changes *which patterns produce
+fraud* (gift-card and electronics risk up, night-time risk down) - it never changes the
+feature draws themselves. That is pure concept drift, and input/score PSI is blind to it by
+construction; covariate PSI crossing 0.10 here would have meant a bug, not a detection. The
+drift is real and detectable, but only through a label-aware channel: among
+confirmed-fraud rows, the gift-card share rises 29.5% -> 42.1% (+12.6 pp) and the
+night-time share falls 52.3% -> 40.5%, putting the fraud-mix PSI at 0.137 - past the 0.10
+investigate line and (marginally) past its small-sample 95th-percentile noise floor. With
+only 126 test-window frauds, that margin is thin, which is exactly why the noise floor is
+printed next to the statistic instead of pretending 0.10 means the same thing at every
+sample size.
+
+![Drift PSI](figures/drift_psi.png)
+
+What a real deployment would do with this monitor:
+
+- **Cadence.** Score PSI daily on a rolling window (it is label-free and cheap); feature
+  PSI weekly per feature; the label-aware fraud-mix monitor on whatever delay confirmed
+  labels arrive with (chargebacks land 30-90 days later - drift monitoring does not wait
+  for them, but concept-drift *confirmation* does).
+- **On alert (0.10-0.25).** Investigate before retraining: which bins moved, was it an
+  upstream data/schema change, a merchant-mix change, or genuine behavior shift. Recheck
+  calibration and the cost threshold t* first - both consume probabilities and go stale
+  faster than ranking does.
+- **On major shift (>0.25) or a confirmed concept drift.** Retrain on a window that
+  includes the shifted regime, re-fit calibration, re-sweep the threshold, and re-validate
+  the queue's coverage floors; then review the thresholds themselves - 0.10/0.25 defaults
+  deserve periodic re-derivation from the monitored population's actual noise floor.
+- **Blind-spot coverage.** Because input PSI misses concept drift, a deployment should
+  also track realized precision/recall of reviewed alerts (the analyst queue doubles as a
+  continuous labelled sample) - a drop there with flat input PSI is the concept-drift
+  signature this repo demonstrates.
+
 ## How to run
 
 ```
 pip install -r requirements.txt
-python -m pytest -q          # 18 tests, ~6 s
+python -m pytest -q          # 24 tests, ~20 s
 python -m ruff check .
 python -m fdo                # run everything, print the measured summary
+python -m fdo --drift        # PSI drift monitor (train vs test window) + figures/drift_psi.png
 python -m fdo --deliverables # also write deliverables/ (executive PDF + Excel workbook)
 ```
 
@@ -126,9 +181,10 @@ fdo/model.py      from-scratch logistic regression, focal loss, time split, Plat
 fdo/evaluate.py   from-scratch PR-AUC, ROC-AUC, P@k, Brier, ECE, reliability + baselines
 fdo/threshold.py  cost-assumption-labelled threshold sweep vs the naive 0.5
 fdo/queue_opt.py  capacity+coverage-constrained review allocation (HiGHS LP/MILP)
+fdo/drift.py      from-scratch PSI drift monitor + label-aware fraud-mix monitor
 fdo/pipeline.py   one deterministic run shared by CLI, exports, and tests
 fdo/exports.py    executive PDF (matplotlib PdfPages) + Excel workbook (openpyxl)
-tests/            18 tests: math checks, leakage guards, economics, exports
+tests/            24 tests: math checks, leakage guards, economics, exports, drift
 docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
 ```
 
