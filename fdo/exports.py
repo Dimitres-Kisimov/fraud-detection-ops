@@ -88,7 +88,8 @@ def _cover_page(pdf: PdfPages, results: dict) -> None:
     fig.text(
         0.07, 0.10,
         "Everything implemented from scratch in NumPy (no scikit-learn / XGBoost); "
-        "queue allocation via SciPy HiGHS.\nDimitres Kisimov - 2026 - MIT License",
+        "queue allocation via SciPy HiGHS.\n"
+        "Dimitres Kisimov - 2026 - all rights reserved (published for portfolio review).",
         fontsize=9, color=MUTED,
     )
     pdf.savefig(fig)
@@ -264,6 +265,59 @@ def _queue_page(pdf: PdfPages, results: dict) -> None:
     plt.close(fig)
 
 
+def _fairness_page(pdf: PdfPages, results: dict) -> None:
+    from fdo.fairness import queue_fairness
+
+    f = queue_fairness(results)
+    thr = f["threshold_coverage"]
+    q = f["queue_coverage"]
+    ts, qs = f["threshold_summary"], f["queue_summary"]
+    fig, ax = plt.subplots(figsize=(11, 8.5))
+    fig.patch.set_facecolor(SURFACE)
+    _style_axes(ax)
+
+    x = np.arange(len(thr))
+    w = 0.38
+    ax.bar(x - w / 2, thr["catch_rate"], width=w, color=S1_BLUE,
+           edgecolor=SURFACE, linewidth=1.5,
+           label=f"Cost threshold t*={f['threshold_star']:.3f}")
+    ax.bar(x + w / 2, q["catch_rate"], width=w, color=S2_GREEN,
+           edgecolor=SURFACE, linewidth=1.5,
+           label=f"Review queue ({f['queue_capacity']} reviews)")
+    ax.axhline(ts["overall_recall"], color=S1_BLUE, linewidth=1.0, linestyle=":")
+    ax.axhline(qs["overall_recall"], color=S2_GREEN, linewidth=1.0, linestyle=":")
+    # fraud count per segment, placed just above the taller of the two bars so
+    # it never collides with the rotated x-axis labels
+    tops = np.maximum(thr["catch_rate"].to_numpy(), q["catch_rate"].to_numpy())
+    for xi, nf, top in zip(x, thr["n_fraud"], tops, strict=True):
+        ax.annotate(f"n={int(nf)}", (xi, top), textcoords="offset points",
+                    xytext=(0, 4), ha="center", fontsize=8, color=MUTED)
+    ax.set_xticks(x)
+    ax.set_xticklabels(thr["segment"], rotation=35, ha="right", fontsize=9, color=INK_2)
+    ax.set_ylabel("Fraud-catch coverage (share of that segment's fraud caught)")
+    ax.set_ylim(0, 1)
+    ax.set_title(
+        "Queue fairness - per-segment fraud-catch coverage on the test window\n"
+        f"Cost threshold: {ts['best_segment']} {ts['best_catch_rate']:.0%} vs "
+        f"{ts['worst_segment']} {ts['worst_catch_rate']:.0%} "
+        f"(a {ts['coverage_gap']:.0%} gap); dotted lines = overall recall",
+        fontsize=11,
+    )
+    leg = ax.legend(loc="upper right", frameon=True, fontsize=10)
+    leg.get_frame().set_edgecolor(BASELINE)
+    note = (
+        "HONEST READ-OUT: a cost-weighted policy concentrates on high-value segments by "
+        "design, so\n'equal dollars' is not 'equal protection'. The queue's coverage floor "
+        "guards review HEADCOUNT per\nsegment (>=5 reviews), not fraud-catch RATE - low-value "
+        "segments can still be caught rarely. Labels\nare synthetic; 'caught' assumes a "
+        "reviewed/flagged fraud is resolved, the same optimistic assumption\nthe cost model makes."
+    )
+    fig.text(0.07, 0.02, _esc(note), fontsize=9, color=INK_2)
+    fig.tight_layout(rect=(0, 0.10, 1, 1))
+    pdf.savefig(fig)
+    plt.close(fig)
+
+
 def _drift_page(pdf: PdfPages, results: dict) -> None:
     from fdo.drift import draw_drift_chart, drift_from_results
 
@@ -294,6 +348,7 @@ def build_pdf(results: dict, path: str) -> str:
         _reliability_page(pdf, results)
         _threshold_page(pdf, results)
         _queue_page(pdf, results)
+        _fairness_page(pdf, results)
         _drift_page(pdf, results)
     return path
 
@@ -473,6 +528,51 @@ def _queue_sheet(wb: Workbook, results: dict) -> None:
     _autosize(ws, {1: 46, 2: 22, 3: 20, 4: 14, 5: 18, 6: 16, 7: 12})
 
 
+def _fairness_sheet(wb: Workbook, results: dict) -> None:
+    from fdo.fairness import queue_fairness
+
+    ws = wb.create_sheet("Fairness")
+    put = _sheet_writer(ws)
+    f = queue_fairness(results)
+    put(1, 1, "Queue fairness - per-segment fraud-catch coverage (test window)", _TITLE)
+    put(2, 1, "Catch rate = share of that segment's OBSERVED fraud that the decision flags/reviews. "
+              "Labels are synthetic; a segment with no observed fraud has a blank catch rate.")
+    r = 4
+    blocks = [
+        (f"Cost threshold t* = {f['threshold_star']:.3f}", f["threshold_coverage"],
+         f["threshold_summary"]),
+        (f"Review queue ({f['queue_capacity']} reviews)", f["queue_coverage"],
+         f["queue_summary"]),
+    ]
+    cols = ["segment", "pool_size", "n_fraud", "fraud_value", "n_fraud_caught",
+            "fraud_value_caught", "catch_rate"]
+    for title, cov, summ in blocks:
+        put(r, 1, title, _HDR)
+        r += 1
+        for j, c in enumerate(cols, start=1):
+            put(r, j, c, _HDR)
+        for _, row in cov.iterrows():
+            r += 1
+            put(r, 1, row["segment"])
+            put(r, 2, int(row["pool_size"]))
+            put(r, 3, int(row["n_fraud"]))
+            put(r, 4, float(row["fraud_value"]), fmt="#,##0.00")
+            put(r, 5, int(row["n_fraud_caught"]))
+            put(r, 6, float(row["fraud_value_caught"]), fmt="#,##0.00")
+            cr = row["catch_rate"]
+            put(r, 7, None if cr != cr else float(cr), fmt="0.0%")  # NaN -> blank
+        r += 1
+        put(r, 1, f"Overall recall {summ['overall_recall']:.2f}; best {summ['best_segment']} "
+                  f"{summ['best_catch_rate']:.0%} vs worst {summ['worst_segment']} "
+                  f"{summ['worst_catch_rate']:.0%} (gap {summ['coverage_gap']:.0%}); "
+                  f"zero fraud caught in: {', '.join(summ['segments_zero_coverage']) or 'none'}.")
+        r += 2
+    put(r, 1, "HONEST READ-OUT: a cost-weighted policy concentrates on high-value segments by "
+              "design; the coverage floor guards review headcount per segment, not fraud-catch "
+              "rate. Equal dollars is not equal protection.")
+    _autosize(ws, {1: 26, 2: 12, 3: 12, 4: 16, 5: 16, 6: 18, 7: 12})
+
+
 def _assumptions_sheet(wb: Workbook, results: dict) -> None:
     ws = wb.create_sheet("Assumptions")
     put = _sheet_writer(ws)
@@ -512,6 +612,7 @@ def build_excel(results: dict, path: str) -> str:
     _metrics_sheet(wb, results)
     _thresholds_sheet(wb, results)
     _queue_sheet(wb, results)
+    _fairness_sheet(wb, results)
     _assumptions_sheet(wb, results)
     wb.save(path)
     return path

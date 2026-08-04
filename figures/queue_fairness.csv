@@ -1,0 +1,17 @@
+decision,segment,pool_size,n_fraud,fraud_value,n_fraud_caught,fraud_value_caught,catch_rate
+cost_threshold_t*=0.047,digital_goods,937,25,3998.060000,18,3324.930000,0.720000
+cost_threshold_t*=0.047,electronics,838,17,2721.380000,9,2379.580000,0.529412
+cost_threshold_t*=0.047,fashion,1114,6,1208.130000,2,486.390000,0.333333
+cost_threshold_t*=0.047,fuel,1034,8,828.510000,1,46.390000,0.125000
+cost_threshold_t*=0.047,gift_cards,684,53,10577.830000,43,9991.850000,0.811321
+cost_threshold_t*=0.047,grocery,2028,4,321.240000,0,0.000000,0.000000
+cost_threshold_t*=0.047,restaurants,1636,8,852.990000,1,401.610000,0.125000
+cost_threshold_t*=0.047,travel,729,5,236.190000,2,136.120000,0.400000
+review_queue_100_reviews,digital_goods,937,25,3998.060000,7,2282.730000,0.280000
+review_queue_100_reviews,electronics,838,17,2721.380000,3,1583.670000,0.176471
+review_queue_100_reviews,fashion,1114,6,1208.130000,2,486.390000,0.333333
+review_queue_100_reviews,fuel,1034,8,828.510000,0,0.000000,0.000000
+review_queue_100_reviews,gift_cards,684,53,10577.830000,20,7643.110000,0.377358
+review_queue_100_reviews,grocery,2028,4,321.240000,0,0.000000,0.000000
+review_queue_100_reviews,restaurants,1636,8,852.990000,1,401.610000,0.125000
+review_queue_100_reviews,travel,729,5,236.190000,0,0.000000,0.000000

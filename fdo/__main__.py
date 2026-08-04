@@ -4,6 +4,9 @@
     python -m fdo --deliverables   also write deliverables/ (PDF + Excel)
     python -m fdo --drift          drift monitor: training window vs final
                                    test window (PSI) + figures/drift_psi.png
+    python -m fdo --decision       cost-curve recommendation + queue-fairness
+                                   read-out; writes figures/cost_curve.svg,
+                                   figures/cost_curve.csv, figures/queue_fairness.csv
 
 Console output is ASCII-only with UTF-8 reconfiguration guarded for older
 Windows consoles.
@@ -33,6 +36,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--drift", action="store_true",
                         help="run the PSI drift monitor (train window vs final test window) "
                              "and write the drift figure")
+    parser.add_argument("--decision", action="store_true",
+                        help="print the cost-curve recommendation and per-segment queue-fairness "
+                             "read-out, and write the cost-curve SVG/CSV + fairness CSV")
     parser.add_argument("--out", default="deliverables", help="output directory")
     parser.add_argument("--figdir", default="figures", help="figure output directory (--drift)")
     parser.add_argument("--seed", type=int, default=7, help="generator seed")
@@ -60,6 +66,30 @@ def main(argv: list[str] | None = None) -> int:
         size = save_drift_figure(analysis, fig_path)
         print()
         print(f"[OK] wrote {fig_path} ({size:,} bytes)")
+
+    if args.decision:
+        import os
+
+        from fdo.cost_curve import (
+            recommendation,
+            save_cost_curve_csv,
+            save_cost_curve_svg,
+        )
+        from fdo.fairness import fairness_lines, save_fairness_csv
+
+        print()
+        for line in recommendation(results):
+            print(line)
+        print()
+        for line in fairness_lines(results):
+            print(line)
+        os.makedirs(args.figdir, exist_ok=True)
+        svg_path = save_cost_curve_svg(results, os.path.join(args.figdir, "cost_curve.svg"))
+        csv_path = save_cost_curve_csv(results, os.path.join(args.figdir, "cost_curve.csv"))
+        fair_path = save_fairness_csv(results, os.path.join(args.figdir, "queue_fairness.csv"))
+        print()
+        for path in (svg_path, csv_path, fair_path):
+            print(f"[OK] wrote {path} ({os.path.getsize(path):,} bytes)")
 
     if args.deliverables:
         from fdo.exports import build_deliverables

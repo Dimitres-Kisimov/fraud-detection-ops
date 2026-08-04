@@ -83,6 +83,16 @@ judged on **test**: 43.3% cheaper than the 0.5 default under the stated assumpti
 default is barely better than doing nothing - at 1.4% prevalence a calibrated model rarely
 exceeds 0.5, which is exactly why default thresholds silently fail on imbalanced problems.
 
+`python -m fdo --decision` renders that validation sweep as a standalone, hand-drawn SVG
+(`figures/cost_curve.svg`, no plotting dependency - pure string construction, so the
+committed figure is byte-deterministic) and writes the per-threshold table it plots to
+`figures/cost_curve.csv` (threshold, review-queue volume, precision, recall, cost
+breakdown). The same command prints a plain-language recommendation naming t\*, the alerts
+it sends to the queue, and the assumptions it rests on. `fdo/cost_curve.py` reads the sweep
+`fdo/threshold.py` already computes - it adds the artifacts, not a second cost calculation.
+
+![Cost vs alert threshold](figures/cost_curve.svg)
+
 ### Review queue: who gets reviewed when you can only review 100
 
 The threshold fires 608 alerts on the test window, but the assumed team (4 analysts x 25
@@ -104,6 +114,37 @@ adds value it doesn't. The solver earns its keep with the coverage floors on: it
 only 0.6% of expected value to keep all 8 segments watched (plain top-K-by-probability
 leaves segments completely unreviewed and recovers 13% less, because ranking by p alone
 ignores amounts). Realized value landing near expected value is the calibration paying off.
+
+### Queue fairness: fraud-catch coverage by segment
+
+Money is not the only axis an ops lead answers for. `fdo/fairness.py` reads out, per
+merchant segment on the test window, the share of that segment's fraud each decision
+actually catches - the question an auditor asks that a single recall number hides. The
+cost-sensitive threshold t\*=0.047 catches 60% of test-window fraud overall, but that
+average is deeply uneven:
+
+| Segment (test window) | Fraud | Caught at t\*=0.047 | Catch rate |
+| --------------------- | ----: | ------------------: | ---------: |
+| gift_cards            |    53 |                  43 |        81% |
+| digital_goods         |    25 |                  18 |        72% |
+| electronics           |    17 |                   9 |        53% |
+| travel                |     5 |                   2 |        40% |
+| fashion               |     6 |                   2 |        33% |
+| fuel                  |     8 |                   1 |        13% |
+| restaurants           |     8 |                   1 |        13% |
+| grocery               |     4 |                   0 |         0% |
+
+That is an 81-percentage-point coverage gap, and it is not a bug: a cost-weighted policy
+concentrates on high-value segments **by design** (a missed gift-card fraud is assumed to
+cost its large amount; a missed grocery fraud, its small one), so **equal dollars is not
+equal protection**. The capacity-limited review queue is more concentrated still - it
+catches 26% of fraud overall and reviews *nothing* in three low-value segments. The queue's
+coverage floor is worth being precise about: it guards review **headcount** per segment
+(at least 5 reviews each), which is not the same as guaranteeing a fraud-catch **rate**.
+Surfacing the gap is the point; whether to close it (a per-segment recall floor, a
+fairness-constrained threshold) is a policy decision, and a labelled one, not a default.
+The full read-out for both decisions is written to `figures/queue_fairness.csv` by
+`python -m fdo --decision` and drawn as a page in the executive PDF.
 
 ### Drift monitoring: PSI, and an honest blind spot
 
@@ -163,10 +204,12 @@ What a real deployment would do with this monitor:
 
 ```
 pip install -r requirements.txt
-python -m pytest -q          # 24 tests, ~20 s
+python -m pytest -q          # 31 tests, ~20 s
 python -m ruff check .
 python -m fdo                # run everything, print the measured summary
 python -m fdo --drift        # PSI drift monitor (train vs test window) + figures/drift_psi.png
+python -m fdo --decision     # cost-curve recommendation + queue-fairness read-out;
+                             #   writes figures/cost_curve.svg + cost_curve.csv + queue_fairness.csv
 python -m fdo --deliverables # also write deliverables/ (executive PDF + Excel workbook)
 ```
 
@@ -180,11 +223,13 @@ fdo/data.py       seeded synthetic generator (patterns, noise, drift documented)
 fdo/model.py      from-scratch logistic regression, focal loss, time split, Platt scaling
 fdo/evaluate.py   from-scratch PR-AUC, ROC-AUC, P@k, Brier, ECE, reliability + baselines
 fdo/threshold.py  cost-assumption-labelled threshold sweep vs the naive 0.5
+fdo/cost_curve.py cost-vs-threshold artifacts (hand-drawn SVG + CSV) + plain-language rec.
 fdo/queue_opt.py  capacity+coverage-constrained review allocation (HiGHS LP/MILP)
+fdo/fairness.py   per-segment fraud-catch coverage (queue-fairness read-out)
 fdo/drift.py      from-scratch PSI drift monitor + label-aware fraud-mix monitor
 fdo/pipeline.py   one deterministic run shared by CLI, exports, and tests
 fdo/exports.py    executive PDF (matplotlib PdfPages) + Excel workbook (openpyxl)
-tests/            24 tests: math checks, leakage guards, economics, exports, drift
+tests/            31 tests: math checks, leakage guards, economics, fairness, exports, drift
 docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
 ```
 
@@ -195,6 +240,10 @@ docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
 - All dollar figures downstream of the model rest on assumed costs ($8/review, missed fraud
   = amount). Change the assumptions and the optimal threshold moves; the code makes them
   explicit knobs.
+- The queue-fairness read-out *surfaces* the per-segment coverage gap; it does not close
+  it. There is no per-segment recall floor or fairness-constrained threshold here - adding
+  one is a labelled policy choice, and the honest default is to show the gap, not to bury it
+  under a single overall recall number.
 - No adversarial adaptation: real fraudsters probe rules and shift behavior. Nothing here
   models that feedback loop - the drift in the generator is scheduled, not responsive.
 - One linear model family. The point is the operational machinery around a model, not
