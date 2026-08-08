@@ -200,16 +200,72 @@ What a real deployment would do with this monitor:
   continuous labelled sample) - a drop there with flat input PSI is the concept-drift
   signature this repo demonstrates.
 
+### Champion/challenger: executing the retrain playbook, with a promotion gate
+
+The playbook above ends with "retrain on a window that includes the shifted regime, re-fit
+calibration, re-sweep the threshold". `python -m fdo --challenger` (`fdo/challenger.py`)
+executes exactly that, then asks the governance question that actually gates a model swap
+in production: does the retrained **challenger** beat the incumbent **champion** by enough,
+on criteria declared before looking, to be promoted?
+
+One variable changes. The challenger is the same model family, loss, and hyperparameters as
+the champion - deliberately no architecture competition (see limitations) - retrained on a
+rolling window that drops the oldest 15% of the timeline (days 18-93 instead of 0-84, so it
+sees more of the post-day-60 drifted regime) and re-calibrated + re-swept on the freshest
+pre-test slice (days 93-102). Both models are judged once, on the identical held-out test
+window (days 102-120); the harness verifies the test indices match row for row.
+
+| Test window, each model at its own t* | Champion | Challenger |
+| ------------------------------------- | -------: | ---------: |
+| PR-AUC / ROC-AUC                      | 0.270 / 0.878 | 0.264 / 0.878 |
+| ECE after Platt                       | 0.0029 | 0.0022 |
+| Cost threshold t* (swept on own val)  | 0.047 | 0.053 |
+| Alerts fired                          | 608 | 471 |
+| Fraud caught                          | 76/126 | 72/126 |
+| Total cost (same assumptions)         | $8,841 | $8,632 |
+
+The swap-set - the first read-out a credit-risk reviewer asks for - explains where the win
+comes from:
+
+| Swap cell                 |     n | Fraud | Fraud rate | Fraud value |
+| ------------------------- | ----: | ----: | ---------: | ----------: |
+| Flagged by both           |   469 |    72 |      15.4% |     $15,881 |
+| Champion only (swap-out)  |   139 |     4 |       2.9% |        $886 |
+| Challenger only (swap-in) |     2 |     0 |       0.0% |          $0 |
+| Neither                   | 8,390 |    50 |       0.6% |      $3,977 |
+
+The retrain does not find new fraud: it swaps in just 2 alerts and catches 4 *fewer*
+frauds. It wins by shedding load - 139 champion alerts at a 2.9% fraud rate leave the
+queue, trading $886 of newly missed fraud for $1,096 of analyst time (137 fewer reviews x
+$8), a net $210 (2.4%) cheaper. That arithmetic *is* the swap-out cell, which is why the
+read-out exists. At a fixed 100-review capacity the challenger *expects* less recovered
+value ($9,487 vs $11,328, its drift-era probabilities are more conservative) and realizes
+about the same ($12,362 vs $12,241) - the better-calibrated model promises less and keeps
+its promise.
+
+Five pre-declared gates (policy knobs, not statistical laws: test PR-AUC within 0.010 of
+the champion, post-Platt ECE <= 0.020, cost at its own t* non-worse, alert volume <= 1.5x
+the champion's, no new zero-coverage segment) all pass on this run, so the measured verdict
+is **PROMOTE**. Read it honestly: the $210 margin is modelled, not measured, and rests
+entirely on the $8/review assumption - price analyst time at $0 and the champion wins on
+missed-fraud dollars alone; the ranking is slightly *worse* (0.264 vs 0.270, inside the
+declared epsilon). The gate exists precisely so a retrain has to earn promotion rather
+than being reflexive - a HOLD would have been an equally publishable result. The full
+comparison lands in `figures/champion_challenger.csv` and the swap-set in
+`figures/challenger_swap.csv`, both byte-deterministic.
+
 ## How to run
 
 ```
 pip install -r requirements.txt
-python -m pytest -q          # 31 tests, ~20 s
+python -m pytest -q          # 42 tests, ~35 s
 python -m ruff check .
 python -m fdo                # run everything, print the measured summary
 python -m fdo --drift        # PSI drift monitor (train vs test window) + figures/drift_psi.png
 python -m fdo --decision     # cost-curve recommendation + queue-fairness read-out;
                              #   writes figures/cost_curve.svg + cost_curve.csv + queue_fairness.csv
+python -m fdo --challenger   # champion/challenger retrain harness: swap-set + PROMOTE/HOLD gate;
+                             #   writes figures/champion_challenger.csv + challenger_swap.csv
 python -m fdo --deliverables # also write deliverables/ (executive PDF + Excel workbook)
 ```
 
@@ -227,9 +283,11 @@ fdo/cost_curve.py cost-vs-threshold artifacts (hand-drawn SVG + CSV) + plain-lan
 fdo/queue_opt.py  capacity+coverage-constrained review allocation (HiGHS LP/MILP)
 fdo/fairness.py   per-segment fraud-catch coverage (queue-fairness read-out)
 fdo/drift.py      from-scratch PSI drift monitor + label-aware fraud-mix monitor
+fdo/challenger.py champion/challenger retrain harness: swap-set analysis + gated promotion
 fdo/pipeline.py   one deterministic run shared by CLI, exports, and tests
 fdo/exports.py    executive PDF (matplotlib PdfPages) + Excel workbook (openpyxl)
-tests/            31 tests: math checks, leakage guards, economics, fairness, exports, drift
+tests/            42 tests: math checks, leakage guards, economics, fairness, exports, drift,
+                  champion/challenger
 docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
 ```
 
@@ -247,7 +305,10 @@ docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
 - No adversarial adaptation: real fraudsters probe rules and shift behavior. Nothing here
   models that feedback loop - the drift in the generator is scheduled, not responsive.
 - One linear model family. The point is the operational machinery around a model, not
-  model-architecture competition.
+  model-architecture competition - which is why the challenger keeps the champion's family,
+  loss, and hyperparameters and moves only the training window. The promotion-gate knobs
+  (epsilon, ECE bound, cost margin, volume ratio) are declared policy assumptions, and the
+  $210 promotion margin is modelled under the stated costs, not a measured saving.
 - Velocity features are drawn per transaction rather than derived from simulated
   per-customer histories.
 

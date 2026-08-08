@@ -7,6 +7,9 @@
     python -m fdo --decision       cost-curve recommendation + queue-fairness
                                    read-out; writes figures/cost_curve.svg,
                                    figures/cost_curve.csv, figures/queue_fairness.csv
+    python -m fdo --challenger     champion/challenger retrain harness: swap-set
+                                   analysis + gated PROMOTE/HOLD verdict; writes
+                                   figures/champion_challenger.csv + challenger_swap.csv
 
 Console output is ASCII-only with UTF-8 reconfiguration guarded for older
 Windows consoles.
@@ -39,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--decision", action="store_true",
                         help="print the cost-curve recommendation and per-segment queue-fairness "
                              "read-out, and write the cost-curve SVG/CSV + fairness CSV")
+    parser.add_argument("--challenger", action="store_true",
+                        help="run the champion/challenger retrain harness (swap-set analysis, "
+                             "promotion gates) and write the comparison + swap-set CSVs")
     parser.add_argument("--out", default="deliverables", help="output directory")
     parser.add_argument("--figdir", default="figures", help="figure output directory (--drift)")
     parser.add_argument("--seed", type=int, default=7, help="generator seed")
@@ -89,6 +95,28 @@ def main(argv: list[str] | None = None) -> int:
         fair_path = save_fairness_csv(results, os.path.join(args.figdir, "queue_fairness.csv"))
         print()
         for path in (svg_path, csv_path, fair_path):
+            print(f"[OK] wrote {path} ({os.path.getsize(path):,} bytes)")
+
+    if args.challenger:
+        import os
+
+        from fdo.challenger import (
+            challenger_lines,
+            run_challenger,
+            save_challenger_csv,
+            save_swap_csv,
+        )
+
+        print()
+        print("[INFO] training the challenger (rolling window; same family/loss/hyperparameters) ...")
+        analysis = run_challenger(results)
+        for line in challenger_lines(analysis):
+            print(line)
+        os.makedirs(args.figdir, exist_ok=True)
+        cmp_path = save_challenger_csv(analysis, os.path.join(args.figdir, "champion_challenger.csv"))
+        swap_path = save_swap_csv(analysis, os.path.join(args.figdir, "challenger_swap.csv"))
+        print()
+        for path in (cmp_path, swap_path):
             print(f"[OK] wrote {path} ({os.path.getsize(path):,} bytes)")
 
     if args.deliverables:

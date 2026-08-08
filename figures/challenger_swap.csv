@@ -1,0 +1,5 @@
+cell,n,n_fraud,fraud_value,fraud_rate
+both_flag,469,72,15880.680000,0.153518
+champion_only (swap-out),139,4,886.190000,0.028777
+challenger_only (swap-in),2,0,0.000000,0.000000
+neither,8390,50,3977.460000,0.005959

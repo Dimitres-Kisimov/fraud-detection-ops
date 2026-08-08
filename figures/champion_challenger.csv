@@ -1,0 +1,3 @@
+model,train_day_start,train_day_end,n_train,val_day_start,val_day_end,n_val,pr_auc,roc_auc,ece,brier,t_star,alerts_at_t_star,fraud_caught_at_t_star,recall_at_t_star,total_cost_at_t_star,expected_recovered_at_capacity,realized_recovered_at_capacity,zero_coverage_segments,verdict
+champion,0.001414,84.154105,42000,84.155608,102.293690,9000,0.269611,0.878091,0.002945,0.011752,0.046744,608,76,0.603175,8841.460000,11327.819526,12241.080000,1,PROMOTE
+challenger,18.081527,93.320494,37500,93.321664,102.293690,4500,0.264400,0.877631,0.002172,0.011769,0.052823,471,72,0.571429,8631.650000,9486.737646,12362.220000,1,PROMOTE
