@@ -10,6 +10,9 @@
     python -m fdo --challenger     champion/challenger retrain harness: swap-set
                                    analysis + gated PROMOTE/HOLD verdict; writes
                                    figures/champion_challenger.csv + challenger_swap.csv
+    python -m fdo --feedback       analyst feedback-loop simulation (selective-labels
+                                   problem): four labelling-policy arms retrained per
+                                   round; writes figures/feedback_loop.csv
 
 Console output is ASCII-only with UTF-8 reconfiguration guarded for older
 Windows consoles.
@@ -45,6 +48,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--challenger", action="store_true",
                         help="run the champion/challenger retrain harness (swap-set analysis, "
                              "promotion gates) and write the comparison + swap-set CSVs")
+    parser.add_argument("--feedback", action="store_true",
+                        help="run the analyst feedback-loop simulation (selective-labels "
+                             "problem, four labelling-policy arms) and write the trajectory CSV")
     parser.add_argument("--out", default="deliverables", help="output directory")
     parser.add_argument("--figdir", default="figures", help="figure output directory (--drift)")
     parser.add_argument("--seed", type=int, default=7, help="generator seed")
@@ -118,6 +124,22 @@ def main(argv: list[str] | None = None) -> int:
         print()
         for path in (cmp_path, swap_path):
             print(f"[OK] wrote {path} ({os.path.getsize(path):,} bytes)")
+
+    if args.feedback:
+        import os
+
+        from fdo.feedback import feedback_lines, run_feedback, save_feedback_csv
+
+        print()
+        print("[INFO] running the feedback-loop simulation (4 labelling-policy arms, "
+              "retrained per round) ...")
+        analysis = run_feedback(results)
+        for line in feedback_lines(analysis):
+            print(line)
+        os.makedirs(args.figdir, exist_ok=True)
+        csv_path = save_feedback_csv(analysis, os.path.join(args.figdir, "feedback_loop.csv"))
+        print()
+        print(f"[OK] wrote {csv_path} ({os.path.getsize(csv_path):,} bytes)")
 
     if args.deliverables:
         from fdo.exports import build_deliverables

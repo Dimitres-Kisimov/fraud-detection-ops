@@ -198,7 +198,8 @@ What a real deployment would do with this monitor:
 - **Blind-spot coverage.** Because input PSI misses concept drift, a deployment should
   also track realized precision/recall of reviewed alerts (the analyst queue doubles as a
   continuous labelled sample) - a drop there with flat input PSI is the concept-drift
-  signature this repo demonstrates.
+  signature this repo demonstrates. How far that "labelled sample" can actually be
+  trusted is measured in the feedback-loop section below.
 
 ### Champion/challenger: executing the retrain playbook, with a promotion gate
 
@@ -254,11 +255,68 @@ than being reflexive - a HOLD would have been an equally publishable result. The
 comparison lands in `figures/champion_challenger.csv` and the swap-set in
 `figures/challenger_swap.csv`, both byte-deterministic.
 
+### Feedback loop: when reviewed alerts become tomorrow's training labels
+
+The drift playbook above leans on a comforting idea: "the analyst queue doubles as a
+continuous labelled sample". `python -m fdo --feedback` (`fdo/feedback.py`) stress-tests
+that idea, because in production it is only half true: analysts confirm labels **only on
+the alerts they review**, and every unreviewed transaction ages into the next training set
+with whatever label the pipeline assumes. That closed loop is the **selective-labels
+problem** (Lakkaraju et al. 2017; "delayed feedback" in the fraud/ads literature), and it
+is invisible on a production dashboard precisely because the missing labels are missing.
+Only a simulation with ground truth can price it - which is what synthetic data is for.
+
+The setup: an initial model trains on the first 40% of the timeline as fully labelled
+history (days 0-48, 24,000 rows - "chargebacks there have matured" is itself a labelled
+assumption). Its cost threshold t0\* = 0.035 and a 100-reviews-per-round capacity are then
+**frozen**, so the labelling policy is the only variable between arms. The remaining
+pre-test timeline (days 48-102, spanning the generator's day-60 concept drift) is deployed
+in three rounds of 9,000 rows: each round, four arms score the traffic with their own
+current model, review the top-100 alerts by p x amount (the repo's queue rule), append the
+round to their training pool under four labelling policies, retrain (same family, loss,
+and hyperparameters), and are evaluated on the same held-out test window as everything
+else in this repo (reporting only - nothing feeds back). Measured, after round 3:
+
+| Arm (what unreviewed rows become)     | Pool   | Labelled prev. | Fraud labelled legit | PR-AUC |    ECE | Recall at t0\* | Alerts |
+| ------------------------------------- | -----: | -------------: | -------------------: | -----: | -----: | -------------: | -----: |
+| full_labels (oracle, simulation-only) | 51,000 |          1.46% |                    0 |  0.268 | 0.0031 |            63% |    806 |
+| chargeback (85% self-report)          | 51,000 |          1.36% |                   52 |  0.273 | 0.0026 |            63% |    731 |
+| assume_legit (labelled legitimate)    | 51,000 |          0.89% |                  292 |  0.272 | 0.0100 |            44% |    197 |
+| reviewed_only (left out of the pool)  | 24,300 |          1.82% |                    0 |  0.271 | 0.0031 |            63% |    746 |
+
+The measured mechanism is not the one folklore expects. **Ranking survives - final PR-AUC
+spans just 0.268-0.273 across arms** - because the clean 24,000-row initial history
+anchors it. What label censoring poisons is the **probabilities**: retraining with 292
+frauds relabelled as legitimate drags the assume_legit arm's labelled prevalence to 0.89%
+against a true 1.46%, its test ECE to 0.0100 (3.2x the oracle arm's 0.0031), and therefore
+its alert volume at the frozen threshold from 651 down to 197 - an alert-starvation spiral
+(fewer alerts -> fewer reviews -> fewer fraud labels -> still-lower probabilities; by
+round 2 its live model fired 102 alerts on 9,000 transactions). Test recall at t0\*
+collapses 61% -> 37% -> 42% -> 44% across rounds while the oracle arm holds 62-67%, and a
+second zero-coverage merchant segment appears. Every decision layer in this repo -
+threshold, queue EV - consumes calibrated probabilities, so censoring poisons exactly the
+part the decisions trust.
+
+Meanwhile the poisoned arm's own dashboard says nothing is wrong: its *observed* recall
+(fraud caught / fraud it knows about) reads **100% every round, by construction** - the
+only fraud it knows about is the fraud it reviewed - while its true label coverage is
+23-35%. The model grades its own homework. Two honest footnotes. First, the chargeback arm
+shows why production survives this at all: with 85% of missed fraud self-reporting it
+recovers oracle-level recall carrying only 52 poisoned labels - but chargebacks land at
+the round boundary here, and real 30-90 day delays would blunt that recovery. Second,
+under the stated $8/review assumptions the starved arm's measured test cost is actually
+*lower* ($8,220 vs $9,911), because the frozen t0\* over-alerts for the healthy models -
+a warning about judging policies by a cost metric with a stale threshold, not a defense of
+label poisoning. The reviewed_only arm barely moves (its pool grows 24,000 -> 24,300,
+fraud-enriched to 1.82% labelled prevalence by its own opinions) and loses almost nothing
+on this generator's mild drift - a generator property, not a general truth. The full
+per-round trajectory lands in `figures/feedback_loop.csv`, byte-deterministic.
+
 ## How to run
 
 ```
 pip install -r requirements.txt
-python -m pytest -q          # 42 tests, ~35 s
+python -m pytest -q          # 55 tests, ~75 s
 python -m ruff check .
 python -m fdo                # run everything, print the measured summary
 python -m fdo --drift        # PSI drift monitor (train vs test window) + figures/drift_psi.png
@@ -266,6 +324,8 @@ python -m fdo --decision     # cost-curve recommendation + queue-fairness read-o
                              #   writes figures/cost_curve.svg + cost_curve.csv + queue_fairness.csv
 python -m fdo --challenger   # champion/challenger retrain harness: swap-set + PROMOTE/HOLD gate;
                              #   writes figures/champion_challenger.csv + challenger_swap.csv
+python -m fdo --feedback     # analyst feedback-loop simulation (selective-labels problem,
+                             #   4 labelling-policy arms); writes figures/feedback_loop.csv
 python -m fdo --deliverables # also write deliverables/ (executive PDF + Excel workbook)
 ```
 
@@ -284,10 +344,11 @@ fdo/queue_opt.py  capacity+coverage-constrained review allocation (HiGHS LP/MILP
 fdo/fairness.py   per-segment fraud-catch coverage (queue-fairness read-out)
 fdo/drift.py      from-scratch PSI drift monitor + label-aware fraud-mix monitor
 fdo/challenger.py champion/challenger retrain harness: swap-set analysis + gated promotion
+fdo/feedback.py   analyst feedback-loop simulation: selective-labels problem, 4 policy arms
 fdo/pipeline.py   one deterministic run shared by CLI, exports, and tests
 fdo/exports.py    executive PDF (matplotlib PdfPages) + Excel workbook (openpyxl)
-tests/            42 tests: math checks, leakage guards, economics, fairness, exports, drift,
-                  champion/challenger
+tests/            55 tests: math checks, leakage guards, economics, fairness, exports, drift,
+                  champion/challenger, feedback loop
 docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
 ```
 
@@ -302,8 +363,15 @@ docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
   it. There is no per-segment recall floor or fairness-constrained threshold here - adding
   one is a labelled policy choice, and the honest default is to show the gap, not to bury it
   under a single overall recall number.
-- No adversarial adaptation: real fraudsters probe rules and shift behavior. Nothing here
-  models that feedback loop - the drift in the generator is scheduled, not responsive.
+- No adversarial adaptation: real fraudsters probe rules and shift behavior. The feedback
+  loop that *is* modelled (`--feedback`) is the label loop, not an adversary - the drift in
+  the generator is scheduled, not responsive.
+- The feedback-loop simulation is a model of a process, not a measurement of one: review
+  capacity and the 85% chargeback rate are labelled assumptions, chargebacks land at the
+  round boundary instead of 30-90 days late (flattering every censored arm), the alert
+  policy is frozen by design, and "ranking survives censoring" is a property of this
+  generator's learnable patterns plus a large clean history - not a promise that it
+  survives in production.
 - One linear model family. The point is the operational machinery around a model, not
   model-architecture competition - which is why the challenger keeps the champion's family,
   loss, and hyperparameters and moves only the training window. The promotion-gate knobs
