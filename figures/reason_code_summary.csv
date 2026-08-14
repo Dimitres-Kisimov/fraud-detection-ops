@@ -1,0 +1,7 @@
+reason_group,share_principal_reason,share_listed_in_top_reasons,mean_contribution_all_alerts,mean_contribution_when_principal,alerts_headed,confirmed_fraud_rate_when_principal,mean_amount_when_principal
+merchant_category,0.404605,0.802632,0.377082,0.636728,246,0.113821,92.242276
+device_change,0.192434,0.248355,0.144353,0.690969,117,0.094017,83.355556
+transaction_amount,0.190789,0.835526,0.301983,0.711286,116,0.206897,358.245603
+account_age,0.113487,0.245066,0.099620,0.522774,69,0.086957,93.213913
+velocity_24h,0.085526,0.574013,0.124846,0.731359,52,0.115385,73.705192
+time_of_day,0.013158,0.595395,0.174746,0.382328,8,0.125000,83.503750

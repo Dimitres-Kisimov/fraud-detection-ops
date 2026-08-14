@@ -13,6 +13,10 @@
     python -m fdo --feedback       analyst feedback-loop simulation (selective-labels
                                    problem): four labelling-policy arms retrained per
                                    round; writes figures/feedback_loop.csv
+    python -m fdo --reasons        reason codes / adverse-action layer: principal reasons
+                                   per alert from an exact Shapley decomposition of the
+                                   score; writes figures/reason_code_summary.csv,
+                                   figures/reason_codes.csv, figures/reason_codes.svg
 
 Console output is ASCII-only with UTF-8 reconfiguration guarded for older
 Windows consoles.
@@ -51,6 +55,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--feedback", action="store_true",
                         help="run the analyst feedback-loop simulation (selective-labels "
                              "problem, four labelling-policy arms) and write the trajectory CSV")
+    parser.add_argument("--reasons", action="store_true",
+                        help="compute the per-alert reason codes (principal reasons, exact "
+                             "Shapley contributions of the score) and write the summary CSV, "
+                             "the queue CSV and the figure")
     parser.add_argument("--out", default="deliverables", help="output directory")
     parser.add_argument("--figdir", default="figures", help="figure output directory (--drift)")
     parser.add_argument("--seed", type=int, default=7, help="generator seed")
@@ -140,6 +148,31 @@ def main(argv: list[str] | None = None) -> int:
         csv_path = save_feedback_csv(analysis, os.path.join(args.figdir, "feedback_loop.csv"))
         print()
         print(f"[OK] wrote {csv_path} ({os.path.getsize(csv_path):,} bytes)")
+
+    if args.reasons:
+        import os
+
+        from fdo.reasons import (
+            reason_lines,
+            run_reasons,
+            save_reason_codes_csv,
+            save_reason_codes_svg,
+            save_reason_summary_csv,
+        )
+
+        print()
+        analysis = run_reasons(results)
+        for line in reason_lines(analysis):
+            print(line)
+        os.makedirs(args.figdir, exist_ok=True)
+        summary_path = save_reason_summary_csv(
+            analysis, os.path.join(args.figdir, "reason_code_summary.csv")
+        )
+        codes_path = save_reason_codes_csv(analysis, os.path.join(args.figdir, "reason_codes.csv"))
+        svg_path = save_reason_codes_svg(analysis, os.path.join(args.figdir, "reason_codes.svg"))
+        print()
+        for path in (summary_path, codes_path, svg_path):
+            print(f"[OK] wrote {path} ({os.path.getsize(path):,} bytes)")
 
     if args.deliverables:
         from fdo.exports import build_deliverables

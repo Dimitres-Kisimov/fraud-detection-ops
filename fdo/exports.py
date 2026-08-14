@@ -21,20 +21,23 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
+# Palette lives in fdo/palette.py (fraud review floor: paper neutrals, alert
+# amber, confirmed-fraud red, cleared green; the validator run is recorded
+# there). Cleared green and the stone fill are sub-3:1 on the light print
+# surface, so every mark drawn in them ships with a visible direct label.
+from fdo.palette import (
+    ALERT_AMBER,
+    BASELINE,
+    CASE_GRAPHITE,
+    CLEARED_GREEN,
+    GRID,
+    INK,
+    INK_2,
+    MUTED,
+    PAPER_STONE,
+    SURFACE,
+)
 from fdo.pipeline import headline
-
-# Reference palette (validated for the light print surface; the magenta slot
-# is sub-3:1 on light so it always ships with a visible direct label).
-SURFACE = "#fcfcfb"
-INK = "#0b0b0b"
-INK_2 = "#52514e"
-MUTED = "#898781"
-GRID = "#e1e0d9"
-BASELINE = "#c3c2b7"
-S1_BLUE = "#2a78d6"
-S2_GREEN = "#008300"
-S3_MAGENTA = "#e87ba4"
-BLUE_200 = "#9ec5f4"
 
 MIN_BYTES = 10_240
 
@@ -102,14 +105,14 @@ def _pr_page(pdf: PdfPages, results: dict) -> None:
     fig, ax = plt.subplots(figsize=(11, 8.5))
     fig.patch.set_facecolor(SURFACE)
     _style_axes(ax)
-    ax.plot(rec, prec, color=S1_BLUE, linewidth=2.0,
+    ax.plot(rec, prec, color=ALERT_AMBER, linewidth=2.0,
             label=f"Model ({m['primary_model']}) - PR-AUC {m['test_primary']['pr_auc']:.3f}")
     prev = m["baseline_random"]["theoretical_pr_auc"]
-    ax.axhline(prev, color=S2_GREEN, linewidth=2.0, linestyle="--",
+    ax.axhline(prev, color=CASE_GRAPHITE, linewidth=2.0, linestyle="--",
                label=f"Prevalence-random floor - PR-AUC {m['baseline_random']['pr_auc']:.3f}")
     bp = m["baseline_p99"]
     ax.plot([bp["flag_recall"]], [bp["flag_precision"]], marker="o", markersize=9,
-            color=S3_MAGENTA, markeredgecolor=INK, markeredgewidth=0.8, linestyle="none",
+            color=CASE_GRAPHITE, markeredgecolor=INK, markeredgewidth=0.8, linestyle="none",
             label=f"Rule: amount > p99 - PR-AUC {bp['pr_auc']:.3f}")
     ax.annotate("amount > p99 rule", (bp["flag_recall"], bp["flag_precision"]),
                 textcoords="offset points", xytext=(10, 6), fontsize=9, color=INK_2)
@@ -142,10 +145,10 @@ def _reliability_page(pdf: PdfPages, results: dict) -> None:
     ax.plot([0, 1], [0, 1], color=BASELINE, linewidth=1.2, linestyle=":", zorder=1)
     ax.annotate("perfect calibration", (0.66, 0.66), rotation=38, fontsize=9,
                 color=MUTED, va="bottom")
-    ax.plot(raw["confidence"], raw["accuracy"], color=S1_BLUE, linewidth=2.0,
+    ax.plot(raw["confidence"], raw["accuracy"], color=ALERT_AMBER, linewidth=2.0,
             marker="o", markersize=8, markeredgecolor=SURFACE, markeredgewidth=1.5,
             label=f"Before calibration - ECE {cal['val_ece_raw']:.3f}")
-    ax.plot(calc["confidence"], calc["accuracy"], color=S2_GREEN, linewidth=2.0,
+    ax.plot(calc["confidence"], calc["accuracy"], color=CLEARED_GREEN, linewidth=2.0,
             marker="o", markersize=8, markeredgecolor=SURFACE, markeredgewidth=1.5,
             label=f"After Platt scaling - ECE {cal['val_ece_cal']:.3f}")
     ax.set_xlabel("Mean predicted fraud probability (equal-count bin)")
@@ -173,7 +176,7 @@ def _threshold_page(pdf: PdfPages, results: dict) -> None:
     fig.patch.set_facecolor(SURFACE)
     _style_axes(ax)
     s = sweep[sweep["threshold"] > 0].sort_values("threshold")
-    ax.plot(s["threshold"], s["total_cost"], color=S1_BLUE, linewidth=2.0)
+    ax.plot(s["threshold"], s["total_cost"], color=ALERT_AMBER, linewidth=2.0)
     ax.set_xscale("log")
     t_star = t["threshold_star"]
     cost_star = t["val_at_star"]["total_cost"]
@@ -220,7 +223,7 @@ def _queue_page(pdf: PdfPages, results: dict) -> None:
 
     labels = ["Constrained\noptimizer", "Top-K by\nprobability", "Top-K by\nexp. value", "Random"]
     vals = comp["expected_recovered"].to_numpy()
-    colors = [S1_BLUE, BLUE_200, BLUE_200, BLUE_200]
+    colors = [ALERT_AMBER, PAPER_STONE, PAPER_STONE, PAPER_STONE]
     bars = ax1.bar(labels, vals, width=0.62, color=colors, edgecolor=SURFACE, linewidth=1.5)
     for rect, v in zip(bars, vals, strict=True):
         ax1.annotate(_esc(f"${v:,.0f}"), (rect.get_x() + rect.get_width() / 2, v),
@@ -236,9 +239,9 @@ def _queue_page(pdf: PdfPages, results: dict) -> None:
 
     x = np.arange(len(cov))
     w = 0.38
-    ax2.bar(x - w / 2, cov["milp_reviews"], width=w, color=S1_BLUE,
+    ax2.bar(x - w / 2, cov["milp_reviews"], width=w, color=ALERT_AMBER,
             edgecolor=SURFACE, linewidth=1.5, label="Constrained optimizer")
-    ax2.bar(x + w / 2, cov["topk_prob_reviews"], width=w, color=S2_GREEN,
+    ax2.bar(x + w / 2, cov["topk_prob_reviews"], width=w, color=CLEARED_GREEN,
             edgecolor=SURFACE, linewidth=1.5, label="Top-K by probability")
     ax2.plot(x, cov["floor"], linestyle="none", marker="_", markersize=14,
              color=INK, label="Coverage floor (assumed)")
@@ -278,14 +281,14 @@ def _fairness_page(pdf: PdfPages, results: dict) -> None:
 
     x = np.arange(len(thr))
     w = 0.38
-    ax.bar(x - w / 2, thr["catch_rate"], width=w, color=S1_BLUE,
+    ax.bar(x - w / 2, thr["catch_rate"], width=w, color=ALERT_AMBER,
            edgecolor=SURFACE, linewidth=1.5,
            label=f"Cost threshold t*={f['threshold_star']:.3f}")
-    ax.bar(x + w / 2, q["catch_rate"], width=w, color=S2_GREEN,
+    ax.bar(x + w / 2, q["catch_rate"], width=w, color=CLEARED_GREEN,
            edgecolor=SURFACE, linewidth=1.5,
            label=f"Review queue ({f['queue_capacity']} reviews)")
-    ax.axhline(ts["overall_recall"], color=S1_BLUE, linewidth=1.0, linestyle=":")
-    ax.axhline(qs["overall_recall"], color=S2_GREEN, linewidth=1.0, linestyle=":")
+    ax.axhline(ts["overall_recall"], color=ALERT_AMBER, linewidth=1.0, linestyle=":")
+    ax.axhline(qs["overall_recall"], color=CLEARED_GREEN, linewidth=1.0, linestyle=":")
     # fraud count per segment, placed just above the taller of the two bars so
     # it never collides with the rotated x-axis labels
     tops = np.maximum(thr["catch_rate"].to_numpy(), q["catch_rate"].to_numpy())

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 452" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="Principal reason codes for the alerts at the cost threshold">
+<rect x="0" y="0" width="920" height="452" fill="#fcfcfb"/>
+<text x="28" y="30" font-size="15" fill="#0b0b0b" font-weight="700">Why the alerts fired: principal reason codes at t* = 0.047</text>
+<text x="28" y="50" font-size="12" fill="#52514e">608 alerts on the held-out test window; contributions are logits against the training-window average transaction - not probabilities, not dollars, not causal.</text>
+<text x="214.0" y="84" font-size="12.5" fill="#0b0b0b" font-weight="600">Share of alerts it heads as principal reason</text>
+<text x="566.0" y="84" font-size="12.5" fill="#0b0b0b" font-weight="600">Confirmed-fraud rate of those alerts</text>
+<text x="566.0" y="100" font-size="11.5" fill="#52514e">deviation from 12.5% across all alerts</text>
+<line x1="214.0" y1="98.0" x2="214.0" y2="344.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="214.0" y="360.0" text-anchor="middle" font-size="11" fill="#898781">0%</text>
+<line x1="332.0" y1="98.0" x2="332.0" y2="344.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="332.0" y="360.0" text-anchor="middle" font-size="11" fill="#898781">25%</text>
+<line x1="450.0" y1="98.0" x2="450.0" y2="344.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="450.0" y="360.0" text-anchor="middle" font-size="11" fill="#898781">50%</text>
+<line x1="719.0" y1="98.0" x2="719.0" y2="344.0" stroke="#c3c2b7" stroke-width="1.4"/>
+<text x="719.0" y="360.0" text-anchor="middle" font-size="11" fill="#898781">all alerts 12.5%</text>
+<text x="566.0" y="360.0" font-size="11" fill="#898781">cleared more often</text>
+<text x="872.0" y="360.0" text-anchor="end" font-size="11" fill="#898781">fraud more often</text>
+<text x="200.0" y="127.0" text-anchor="end" font-size="12.5" fill="#0b0b0b">merchant category</text>
+<rect x="214.0" y="113.5" width="191.0" height="17.0" rx="3" fill="#a06a00"/>
+<text x="413.0" y="127.0" font-size="12" fill="#0b0b0b">40.5%</text>
+<text x="457.0" y="127.0" font-size="11" fill="#898781">n=246</text>
+<rect x="710.4" y="113.5" width="8.6" height="17.0" rx="3" fill="#3fae63"/>
+<text x="702.4" y="127.0" text-anchor="end" font-size="12" fill="#0b0b0b">11.4%</text>
+<text x="200.0" y="167.0" text-anchor="end" font-size="12.5" fill="#0b0b0b">device change</text>
+<rect x="214.0" y="153.5" width="90.8" height="17.0" rx="3" fill="#a06a00"/>
+<text x="312.8" y="167.0" font-size="12" fill="#0b0b0b">19.2%</text>
+<text x="356.8" y="167.0" font-size="11" fill="#898781">n=117</text>
+<rect x="695.3" y="153.5" width="23.7" height="17.0" rx="3" fill="#3fae63"/>
+<text x="687.3" y="167.0" text-anchor="end" font-size="12" fill="#0b0b0b">9.4%</text>
+<text x="200.0" y="207.0" text-anchor="end" font-size="12.5" fill="#0b0b0b">transaction amount</text>
+<rect x="214.0" y="193.5" width="90.1" height="17.0" rx="3" fill="#a06a00"/>
+<text x="312.1" y="207.0" font-size="12" fill="#0b0b0b">19.1%</text>
+<text x="356.1" y="207.0" font-size="11" fill="#898781">n=116</text>
+<rect x="719.0" y="193.5" width="62.7" height="17.0" rx="3" fill="#9c1c1c"/>
+<text x="789.7" y="207.0" font-size="12" fill="#0b0b0b">20.7%</text>
+<text x="200.0" y="247.0" text-anchor="end" font-size="12.5" fill="#0b0b0b">account age</text>
+<rect x="214.0" y="233.5" width="53.6" height="17.0" rx="3" fill="#a06a00"/>
+<text x="275.6" y="247.0" font-size="12" fill="#0b0b0b">11.3%</text>
+<text x="319.6" y="247.0" font-size="11" fill="#898781">n=69</text>
+<rect x="689.9" y="233.5" width="29.1" height="17.0" rx="3" fill="#3fae63"/>
+<text x="681.9" y="247.0" text-anchor="end" font-size="12" fill="#0b0b0b">8.7%</text>
+<text x="200.0" y="287.0" text-anchor="end" font-size="12.5" fill="#0b0b0b">velocity 24h</text>
+<rect x="214.0" y="273.5" width="40.4" height="17.0" rx="3" fill="#a06a00"/>
+<text x="262.4" y="287.0" font-size="12" fill="#0b0b0b">8.6%</text>
+<text x="306.4" y="287.0" font-size="11" fill="#898781">n=52</text>
+<rect x="711.6" y="273.5" width="7.4" height="17.0" rx="3" fill="#3fae63"/>
+<text x="703.6" y="287.0" text-anchor="end" font-size="12" fill="#0b0b0b">11.5%</text>
+<text x="200.0" y="327.0" text-anchor="end" font-size="12.5" fill="#0b0b0b">time of day</text>
+<rect x="214.0" y="313.5" width="6.2" height="17.0" rx="3" fill="#a06a00"/>
+<text x="228.2" y="327.0" font-size="12" fill="#0b0b0b">1.3%</text>
+<text x="272.2" y="327.0" font-size="11" fill="#898781">n=8</text>
+<rect x="719.0" y="313.5" width="1.0" height="17.0" rx="3" fill="#9c1c1c"/>
+<text x="727.0" y="327.0" font-size="12" fill="#0b0b0b">12.5%</text>
+<line x1="28" y1="390" x2="892" y2="390" stroke="#e1e0d9" stroke-width="1"/>
+<text x="28" y="410" font-size="11.5" fill="#52514e">Reasons are groups of design-matrix columns (one clock, one account-age pair, seven category dummies), summed - exact for a linear score. The median alert needs 1 reason(s) removed to fall back under the cut.</text>
+<text x="28" y="428" font-size="11.5" fill="#52514e">weighted_bce ranks these alerts almost identically (Spearman 0.9997) yet names a different principal reason on 1.5% of them. Synthetic data; explains the model, not the fraud.</text>
+</svg>

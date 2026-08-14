@@ -312,11 +312,91 @@ fraud-enriched to 1.82% labelled prevalence by its own opinions) and loses almos
 on this generator's mild drift - a generator property, not a general truth. The full
 per-round trajectory lands in `figures/feedback_loop.csv`, byte-deterministic.
 
+### Reason codes: why THIS alert fired, and what the queue changes about it
+
+Every section above answers a population question. An analyst opening one alert asks a
+different one - and so does QA, and so does anyone who has to defend the queue in a
+model-risk review: *why is this transaction in front of me?* `python -m fdo --reasons`
+(`fdo/reasons.py`) answers it in the shape regulated lending answers it, a short list of
+**principal reasons**, computed from the model this repo already trained: no surrogate
+model, no sampling, no randomness.
+
+The decomposition is exact rather than approximate, which is the only reason it is worth
+shipping. The champion is linear in its standardized features, so fixing a **reference
+profile** `r` - the mean training-window transaction, which scores `z(r)` = -0.509 - makes
+
+```
+z(x) = z(r) + sum_j theta_j * (xtilde_j - r_j)
+```
+
+an identity, and for a model linear in its inputs those per-feature terms *are* the Shapley
+values of the score under an interventional reference. The tests assert that against
+brute-force enumeration over all 2^m coalitions, so the claim is checked in CI rather than
+cited. Redundant encodings are summed into six **reason groups** first (one clock spread
+across `hour_sin`, `hour_cos`, `is_night`; account age across `log_tenure`,
+`is_new_account`; seven merchant-category dummies) - grouping is exactly additive for a
+linear score, and it is what stops an explanation from saying "hour_cos". The alert cut is
+carried into logit space exactly (`z >= (logit(t*) - b) / a`), so the explained set is the
+same 608 alerts the shipped threshold fires, never a re-derived one.
+
+Measured over those 608 alerts at t\* = 0.047 on the held-out test window (12.5% of them
+confirmed fraud):
+
+| Reason group         | Principal reason for | Listed at all | Mean contribution (logits) | Confirmed fraud when principal | Mean amount |
+| -------------------- | -------------------: | ------------: | -------------------------: | -----------------------------: | ----------: |
+| `merchant_category`  |           40.5% (246) |         80.3% |                     +0.377 |                          11.4% |         $92 |
+| `device_change`      |           19.2% (117) |         24.8% |                     +0.144 |                           9.4% |         $83 |
+| `transaction_amount` |           19.1% (116) |         83.6% |                     +0.302 |                          20.7% |        $358 |
+| `account_age`        |            11.3% (69) |         24.5% |                     +0.100 |                           8.7% |         $93 |
+| `velocity_24h`       |             8.6% (52) |         57.4% |                     +0.125 |                          11.5% |         $74 |
+| `time_of_day`        |              1.3% (8) |         59.5% |                     +0.175 |                          12.5% |         $84 |
+
+Three things fall out of that table that no aggregate metric in this repo shows:
+
+- **The most common reason is not the most predictive one.** `merchant_category` heads 40.5%
+  of alerts, and those alerts are confirmed fraud 11.4% of the time - *below* the 12.5%
+  all-alert average - while `transaction_amount` heads 19.1% at 20.7%. Reason frequency and
+  reason precision are different quantities, and only the per-alert view separates them.
+  `time_of_day` is the mirror image: listed on 59.5% of alerts, principal on 1.3% - a
+  background contributor that is almost never the driver.
+- **The queue rewrites the mix an analyst actually sees.** The 100 reviews the optimizer
+  selects are headed by `transaction_amount` on 59.0% of rows against 19.1% across all
+  alerts, because the queue ranks by `p x amount` and amount also enters the score. That
+  worklist is 33.0% confirmed fraud against 12.5% across alerts - the dollar weighting is
+  doing exactly what it was asked to do, and it means the reason distribution an analyst
+  experiences is not the reason distribution of the alert population.
+- **Most alerts rest on a single reason.** Removing just the largest contribution drops
+  88.7% of alerts back under the threshold (median 1, against 3.30 reasons listed per
+  alert). These alerts sit close to the cut, so a notice with four lines on it is thinner
+  than it looks.
+
+The layer also reports its own fragility. The two models the pipeline trains rank these
+transactions almost identically - Spearman 0.9997 on calibrated probabilities - yet name a
+different principal reason on 1.5% of alerts. Ranking agreement is not explanation
+agreement, and a shop that swaps models on a PR-AUC tie will quietly change the reasons it
+gives people.
+
+![Reason codes](figures/reason_codes.svg)
+
+`figures/reason_code_summary.csv` carries the table above and `figures/reason_codes.csv` the
+per-alert notice for all 100 queued reviews (up to four ranked reasons with their
+contributions, the score, and how many reasons it takes to cross the threshold) - both
+byte-deterministic.
+
+Read honestly: contributions are **logits against a stated reference**, not probabilities,
+not dollars, not causal - change the reference and every number changes. "Reasons to cross"
+is arithmetic inside the model, not a claim the transaction would have been legitimate. The
+model has known headroom against the oracle (the generator withholds an amount x
+gift/digital interaction from the design matrix on purpose), so a faithful account of the
+*score* can still be an incomplete account of the *fraud*. And the four-reason format is
+borrowed from ECOA / Regulation B adverse-action practice as a discipline: a fraud alert is
+not a credit denial, and nothing here is legal advice.
+
 ## How to run
 
 ```
 pip install -r requirements.txt
-python -m pytest -q          # 55 tests, ~75 s
+python -m pytest -q          # 78 tests, ~85 s
 python -m ruff check .
 python -m fdo                # run everything, print the measured summary
 python -m fdo --drift        # PSI drift monitor (train vs test window) + figures/drift_psi.png
@@ -326,6 +406,9 @@ python -m fdo --challenger   # champion/challenger retrain harness: swap-set + P
                              #   writes figures/champion_challenger.csv + challenger_swap.csv
 python -m fdo --feedback     # analyst feedback-loop simulation (selective-labels problem,
                              #   4 labelling-policy arms); writes figures/feedback_loop.csv
+python -m fdo --reasons      # reason codes: principal reasons per alert (exact Shapley
+                             #   decomposition); writes figures/reason_code_summary.csv +
+                             #   reason_codes.csv + reason_codes.svg
 python -m fdo --deliverables # also write deliverables/ (executive PDF + Excel workbook)
 ```
 
@@ -345,10 +428,12 @@ fdo/fairness.py   per-segment fraud-catch coverage (queue-fairness read-out)
 fdo/drift.py      from-scratch PSI drift monitor + label-aware fraud-mix monitor
 fdo/challenger.py champion/challenger retrain harness: swap-set analysis + gated promotion
 fdo/feedback.py   analyst feedback-loop simulation: selective-labels problem, 4 policy arms
+fdo/reasons.py    reason codes: exact Shapley decomposition of the score, grouped, per alert
+fdo/palette.py    the one place the figure palette lives (validator run recorded in it)
 fdo/pipeline.py   one deterministic run shared by CLI, exports, and tests
 fdo/exports.py    executive PDF (matplotlib PdfPages) + Excel workbook (openpyxl)
-tests/            55 tests: math checks, leakage guards, economics, fairness, exports, drift,
-                  champion/challenger, feedback loop
+tests/            78 tests: math checks, leakage guards, economics, fairness, exports, drift,
+                  champion/challenger, feedback loop, reason codes
 docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
 ```
 
@@ -379,6 +464,17 @@ docs/BUSINESS_CASE.md  the same story in business terms, assumptions labelled
   $210 promotion margin is modelled under the stated costs, not a measured saving.
 - Velocity features are drawn per transaction rather than derived from simulated
   per-customer histories.
+- The reason codes are exact *for this model family and this reference*, and that is the
+  whole of the claim. Linear-model Shapley values are a closed form; a gradient-boosted or
+  neural score would need sampling-based attribution with its own error bars, and a
+  different reference profile (a segment mean, a nearest-neighbour set) would move every
+  number. Correlated groups still share credit between themselves - grouping fixes the
+  redundant *encodings* of one concept, not the genuine correlation between amount and
+  merchant category. And an explanation faithful to the score is not automatically an
+  explanation of the fraud: the model's oracle gap is still there underneath.
+- There is no entity graph, so nothing here does fraud-ring or shared-device detection: the
+  generator emits independent transactions with no customer, merchant or device identifiers
+  to link them by. Adding that would be a generator change, not an analysis change.
 
 ## License
 

@@ -219,13 +219,26 @@ def draw_drift_chart(analysis: dict, ax) -> None:
     standalone PNG and the executive-PDF drift page."""
     from matplotlib.patches import Rectangle
 
-    from fdo.exports import GRID, INK, INK_2, MUTED, S1_BLUE, S2_GREEN, SURFACE, _style_axes
+    from fdo.exports import _style_axes
+    from fdo.palette import (
+        ALERT_AMBER,
+        CASE_GRAPHITE,
+        CLEARED_GREEN,
+        FRAUD_RED,
+        GRID,
+        INK,
+        INK_2,
+        MUTED,
+        SURFACE,
+    )
 
     rep = analysis["report"]
     fm = analysis["fraud_mix"]
     labels = list(rep["feature"]) + ["fraud mix: merchant category", "fraud mix: night share"]
     values = list(rep["psi"]) + [fm["category_psi"], fm["night_psi"]]
-    colors = [S1_BLUE] * len(rep) + [S2_GREEN, S2_GREEN]
+    # flat covariate monitors stay in paper-trail graphite; the label-aware
+    # pair - the channel that actually sees this drift - carries the colour.
+    colors = [CASE_GRAPHITE] * len(rep) + [CLEARED_GREEN, CLEARED_GREEN]
 
     _style_axes(ax)
     y = np.arange(len(labels))[::-1]
@@ -233,8 +246,8 @@ def draw_drift_chart(analysis: dict, ax) -> None:
     for yi, v in zip(y, values, strict=True):
         ax.annotate(f"{v:.3f}", (v, yi), textcoords="offset points", xytext=(4, 0),
                     va="center", fontsize=8.5, color=INK_2)
-    ax.axvline(STABLE_MAX, color=MUTED, linewidth=1.2, linestyle="--")
-    ax.axvline(MODERATE_MAX, color=INK_2, linewidth=1.2, linestyle="--")
+    ax.axvline(STABLE_MAX, color=ALERT_AMBER, linewidth=1.2, linestyle="--")
+    ax.axvline(MODERATE_MAX, color=FRAUD_RED, linewidth=1.2, linestyle="--")
     top = y.max() + 0.45
     ax.annotate("0.10 investigate", (STABLE_MAX, top), fontsize=9, color=MUTED,
                 textcoords="offset points", xytext=(4, 0))
@@ -251,8 +264,8 @@ def draw_drift_chart(analysis: dict, ax) -> None:
         "concept drift, visible only in the label-aware fraud-population mix (green)",
         fontsize=11, color=INK,
     )
-    handles = [Rectangle((0, 0), 1, 1, color=S1_BLUE),
-               Rectangle((0, 0), 1, 1, color=S2_GREEN)]
+    handles = [Rectangle((0, 0), 1, 1, color=CASE_GRAPHITE),
+               Rectangle((0, 0), 1, 1, color=CLEARED_GREEN)]
     leg = ax.legend(handles, ["covariate PSI (inputs + score)",
                               "label-aware PSI (confirmed-fraud rows)"],
                     loc="lower right", frameon=True, fontsize=9)
@@ -268,7 +281,7 @@ def save_drift_figure(analysis: dict, path: str) -> int:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from fdo.exports import SURFACE
+    from fdo.palette import SURFACE
 
     fig, ax = plt.subplots(figsize=(10.0, 7.5))
     fig.patch.set_facecolor(SURFACE)

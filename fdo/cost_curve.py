@@ -31,16 +31,18 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-# Palette reused from fdo/exports.py (validated for the light surface). A
-# single-series line needs one hue; text stays in ink tokens, not the series
-# colour.
-_SURFACE = "#fcfcfb"
-_INK = "#0b0b0b"
-_INK_2 = "#52514e"
-_MUTED = "#898781"
-_GRID = "#e1e0d9"
-_AXIS = "#c3c2b7"
-_SERIES = "#2a78d6"
+# Palette from fdo/palette.py, imported without pulling in matplotlib (this
+# module hand-draws its SVG on purpose). One series = one hue: the cost of
+# running the alert queue is drawn in alert amber, the chosen operating point
+# gets the sparing cleared-green accent, and all text stays in ink tokens.
+from fdo.palette import ALERT_AMBER as _SERIES
+from fdo.palette import BASELINE as _AXIS
+from fdo.palette import CLEARED_GREEN as _CHOSEN
+from fdo.palette import GRID as _GRID
+from fdo.palette import INK as _INK
+from fdo.palette import INK_2 as _INK_2
+from fdo.palette import MUTED as _MUTED
+from fdo.palette import SURFACE as _SURFACE
 
 
 def cost_curve_frame(results: dict) -> pd.DataFrame:
@@ -211,7 +213,7 @@ def save_cost_curve_svg(results: dict, path: str) -> str:
         f'stroke="{_INK}" stroke-width="1.2" stroke-dasharray="5 4"/>'
     )
     parts.append(
-        f'<circle cx="{xs:.1f}" cy="{ys:.1f}" r="4.5" fill="{_SERIES}" '
+        f'<circle cx="{xs:.1f}" cy="{ys:.1f}" r="4.5" fill="{_CHOSEN}" '
         f'stroke="{_SURFACE}" stroke-width="1.5"/>'
     )
     parts.append(
